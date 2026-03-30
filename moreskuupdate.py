@@ -80,7 +80,6 @@ def create_pdf(dataframe):
 
     data = [["Cat", "Color", "Size", "Qty"]]
     for _, row in dataframe.iterrows():
-        # Ensure Qty is cast to int for PDF display
         data.append([row["Category"], row["Color"], row["Size"], int(row["Qty"])])
 
     table = Table(data, colWidths=[0.45*inch, 1.35*inch, 0.6*inch, 0.4*inch], repeatRows=1)
@@ -114,7 +113,7 @@ with st.sidebar:
     st.header("Upload Center")
     uploaded_files = st.file_uploader("Upload CSV files", type=["csv"], accept_multiple_files=True)
     st.divider()
-    st.caption("v2.1 - Whole Number Fixed")
+    st.caption("v2.2 - Black/White Priority Sort")
 
 if uploaded_files:
     all_dfs = []
@@ -130,7 +129,6 @@ if uploaded_files:
         df = pd.concat(all_dfs, ignore_index=True)
         qty_col = next((c for c in df.columns if "QTY" in c or "QUANT" in c), None)
         
-        # Robust Qty Handling
         if qty_col:
             df[qty_col] = pd.to_numeric(df[qty_col], errors='coerce').fillna(1)
         else:
@@ -142,16 +140,22 @@ if uploaded_files:
         df['Colors'] = df['SKU'].apply(extract_colors)
         df = df.explode('Colors')
         
-        # AGGREGATION & WHOLE NUMBER FIX
+        # AGGREGATION
         final_df = df.groupby(['Category', 'Colors', 'Size'], as_index=False)[qty_col].sum()
         final_df.columns = ["Category", "Color", "Size", "Qty"]
         
-        # Force integers to remove .0
-        final_df["Qty"] = final_df["Qty"].astype(int)
+        # --- CUSTOM COLOR SORTING LOGIC ---
+        # 1. Sare unique colors nikal kar Black/White hata do
+        other_colors = sorted([c for c in final_df["Color"].unique() if c not in ["Black", "White"]])
+        # 2. Pehle Black, phir White, phir baki sab order mein
+        custom_color_order = ["Black", "White"] + other_colors
         
-        # Sort
+        final_df["Color"] = pd.Categorical(final_df["Color"], categories=custom_color_order, ordered=True)
         final_df["Size"] = pd.Categorical(final_df["Size"], categories=SIZE_ORDER, ordered=True)
+        
+        # 3. Final Sort & Filter
         final_df = final_df.sort_values(by=["Category", "Color", "Size"]).dropna(subset=['Size'])
+        final_df["Qty"] = final_df["Qty"].astype(int)
 
         # Sidebar Filters
         available_cats = sorted(final_df["Category"].unique().tolist())
