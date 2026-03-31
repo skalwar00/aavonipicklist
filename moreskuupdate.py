@@ -12,7 +12,6 @@ from reportlab.lib.units import inch
 # --- CONFIG & CONSTANTS ---
 st.set_page_config(page_title="Aavoni Pick List PRO", layout="wide", page_icon="📦")
 
-# Custom CSS for Professional Look
 st.markdown("""
     <style>
     .main { background-color: #f0f2f6; }
@@ -24,29 +23,14 @@ st.markdown("""
         border-left: 5px solid #007bff;
     }
     div.stButton > button:first-child {
-        background-color: #007bff;
-        color: white;
-        height: 3em;
-        border-radius: 8px;
-        border: none;
-        font-weight: bold;
-        transition: 0.3s;
-    }
-    div.stButton > button:first-child:hover {
-        background-color: #0056b3;
-        border: none;
+        background-color: #007bff; color: white; height: 3em; border-radius: 8px; font-weight: bold;
     }
     .dev-tag {
         background: linear-gradient(135deg, #007bff, #6610f2);
-        color: white;
-        padding: 10px;
-        border-radius: 8px;
-        text-align: center;
-        font-weight: bold;
-        margin-top: 20px;
+        color: white; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold; margin-top: 20px;
     }
     </style>
-    """, unsafe_allow_html=True) # FIXED TYPO HERE
+    """, unsafe_allow_html=True)
 
 COLOR_KEYWORDS = {
     "BLACK": "Black", "BLK": "Black", "WHITE": "White", "WHT": "White",
@@ -70,17 +54,28 @@ def extract_size(sku):
 
 def extract_colors(sku):
     sku_clean = str(sku).upper().replace("_", " ")
+    
+    # Priority check for Royal Blue / RB / Teal to map to "Teal Blue"
+    teal_variants = ["ROYAL BLUE", "ROYALBLUE", "TEAL", "RB"]
+    
     if "CBO" in sku_clean:
         match = re.search(r'\((.*?)\)', sku_clean)
         if match:
             parts = match.group(1).replace(" ", "").split("+")
             final_colors = []
             for p in parts:
-                if p in ["RB", "TEAL"]: final_colors.append("Teal Blue")
-                elif p in COLOR_KEYWORDS: final_colors.append(COLOR_KEYWORDS[p])
+                if any(v.replace(" ","") == p or v == p for v in teal_variants):
+                    final_colors.append("Teal Blue")
+                elif p in COLOR_KEYWORDS: 
+                    final_colors.append(COLOR_KEYWORDS[p])
             return list(dict.fromkeys(final_colors)) if final_colors else ["Unknown"]
-    if any(x in sku_clean for x in ["TEAL", "RB"]): return ["Teal Blue"]
-    if any(x in sku_clean for x in ["SB", "SKY"]): return ["Sky Blue"]
+    
+    if any(x in sku_clean for x in teal_variants): 
+        return ["Teal Blue"]
+        
+    if any(x in sku_clean for x in ["SB", "SKY"]): 
+        return ["Sky Blue"]
+
     for key, value in COLOR_KEYWORDS.items():
         if re.search(rf'\b{key}\b', sku_clean): return [value]
     return ["Unknown"]
@@ -144,58 +139,39 @@ def create_pdf(dataframe):
     elements.append(table); doc.build(elements); buffer.seek(0)
     return buffer
 
-# --- MAIN UI ---
+# --- UI ---
 st.title("📦 Aavoni Pick List PRO")
-
 with st.sidebar:
     st.header("⚙️ Control Panel")
     uploaded_files = st.file_uploader("Upload Orders (CSV)", type=["csv"], accept_multiple_files=True)
-    
     st.markdown("---")
-    # --- DEVELOPER BRANDING ---
     st.markdown('<div class="dev-tag">👨‍💻 Developed by Sunil</div>', unsafe_allow_html=True)
-    st.caption("Aavoni Inventory Solution v2.7")
 
 if uploaded_files:
     res = process_data(uploaded_files)
     if res:
         final_df, unknown_report = res
-        
         with st.sidebar:
             with st.expander("🔍 Unknown SKU Detector", expanded=not unknown_report.empty):
                 if not unknown_report.empty:
-                    st.warning("Pechan mein nahi aaye:")
+                    st.warning("Fix these SKUs:")
                     st.dataframe(unknown_report.rename(columns={'RAW_QTY': 'Qty'}), hide_index=True)
-                else:
-                    st.success("All SKUs matched! ✅")
-
-        cats = sorted(final_df["Category"].unique())
-        selected = st.sidebar.multiselect("Filter Category", cats, default=cats)
+                else: st.success("All matched! ✅")
+        selected = st.sidebar.multiselect("Category", sorted(final_df["Category"].unique()), default=final_df["Category"].unique())
         display_df = final_df[final_df["Category"].isin(selected)]
-
-        # Dashboard
         c1, c2, c3 = st.columns(3)
-        c1.metric("📦 Total Items", int(display_df["Qty"].sum()))
-        c2.metric("🌈 Unique Variants", len(display_df))
+        c1.metric("📦 Items", int(display_df["Qty"].sum()))
+        c2.metric("🌈 Variants", len(display_df))
         c3.metric("📂 Files", len(uploaded_files))
-
-        st.subheader("📋 Packing List")
-        st.dataframe(
-            display_df.style.apply(lambda r: ['background-color: #fff2f2; color: #cc0000; font-weight: bold' if r.Qty >= 5 else '' for _ in r], axis=1),
-            use_container_width=True,
-            hide_index=True
-        )
-
+        st.dataframe(display_df.style.apply(lambda r: ['background-color: #fff2f2; color: #cc0000; font-weight: bold' if r.Qty >= 5 else '' for _ in r], axis=1), use_container_width=True, hide_index=True)
         st.divider()
-        st.subheader("🚀 Quick Export")
         col1, col2 = st.columns(2)
         with col1:
             excel_buffer = io.BytesIO()
             with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer: display_df.to_excel(writer, index=False)
-            st.download_button("📥 Excel Sheet", data=excel_buffer.getvalue(), file_name=f"PickList_{datetime.now().strftime('%d%m')}.xlsx", use_container_width=True)
+            st.download_button("📥 Excel Sheet", data=excel_buffer.getvalue(), file_name=f"PickList.xlsx", use_container_width=True)
         with col2:
             pdf_file = create_pdf(display_df)
-            st.download_button("📄 PDF (Mobile Print)", data=pdf_file, file_name=f"PickList_{datetime.now().strftime('%H%M')}.pdf", use_container_width=True)
-
+            st.download_button("📄 PDF (Print)", data=pdf_file, file_name=f"PickList.pdf", use_container_width=True)
 else:
-    st.info("👋 **Aavoni Dashboard** | Sidebar se CSV files upload karke shuru karein.")
+    st.info("👋 Dashboard ready! Upload files to start.")
