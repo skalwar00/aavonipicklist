@@ -12,16 +12,22 @@ from reportlab.lib.units import inch
 # --- CONFIG & CONSTANTS ---
 st.set_page_config(page_title="Aavoni Pick List PRO", layout="wide", page_icon="📦")
 
+# Custom CSS for better look
+st.markdown("""
+    <style>
+    .main { background-color: #f8f9fa; }
+    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #007bff; color: white; }
+    .dev-footer { position: fixed; bottom: 10px; left: 10px; font-size: 12px; color: #6c757d; }
+    </style>
+    """, unsafe_allow_stdio=True)
+
 COLOR_KEYWORDS = {
-    "BLACK": "Black", "BLK": "Black",
-    "WHITE": "White", "WHT": "White",
-    "BEIGE": "Beige", "BG": "Beige", "BEG": "Beige",
-    "RANI": "Rani", "PINK": "Rani",
-    "MAROON": "Maroon", "MRN": "Maroon",
-    "OLIVE": "Olive", "OLV": "Olive",
-    "NAVY": "Navy", "YELLOW": "Yellow",
-    "GREY": "Grey", "GRAY": "Grey",
-    "BLUE": "Blue", "GREEN": "Green", "RUST": "Rust",
+    "BLACK": "Black", "BLK": "Black", "WHITE": "White", "WHT": "White",
+    "BEIGE": "Beige", "BG": "Beige", "BEG": "Beige", "RANI": "Rani", 
+    "PINK": "Rani", "MAROON": "Maroon", "MRN": "Maroon", "OLIVE": "Olive", 
+    "OLV": "Olive", "NAVY": "Navy", "YELLOW": "Yellow", "GREY": "Grey", 
+    "GRAY": "Grey", "BLUE": "Blue", "GREEN": "Green", "RUST": "Rust",
     "LAVENDER": "Lavender", "MINT": "Mint", "PEACH": "Peach"
 }
 
@@ -30,7 +36,6 @@ SIZE_ORDER = ["S","M","L","XL","XXL","2XL","3XL","4XL","5XL","6XL","7XL","8XL","
 # --- HELPERS ---
 
 def extract_size(sku):
-    # Underscores ko space se badalna taaki boundary (\b) sahi kaam kare
     sku = str(sku).upper().strip().replace("_", " ")
     match = re.search(r'(\d{1,2}XL|XXL|XL|L|M|S)$', sku)
     if not match:
@@ -38,9 +43,7 @@ def extract_size(sku):
     return match.group(1) if match else "Free"
 
 def extract_colors(sku):
-    # Underscores ko space se badalna taaki boundary (\b) sahi kaam kare
     sku_clean = str(sku).upper().replace("_", " ")
-    
     if "CBO" in sku_clean:
         match = re.search(r'\((.*?)\)', sku_clean)
         if match:
@@ -50,13 +53,10 @@ def extract_colors(sku):
                 if p in ["RB", "TEAL"]: final_colors.append("Teal Blue")
                 elif p in COLOR_KEYWORDS: final_colors.append(COLOR_KEYWORDS[p])
             return list(dict.fromkeys(final_colors)) if final_colors else ["Unknown"]
-    
     if any(x in sku_clean for x in ["TEAL", "RB"]): return ["Teal Blue"]
     if any(x in sku_clean for x in ["SB", "SKY"]): return ["Sky Blue"]
-
     for key, value in COLOR_KEYWORDS.items():
-        if re.search(rf'\b{key}\b', sku_clean):
-            return [value]
+        if re.search(rf'\b{key}\b', sku_clean): return [value]
     return ["Unknown"]
 
 def get_category(sku):
@@ -73,48 +73,31 @@ def process_data(uploaded_files):
             temp_df = pd.read_csv(file)
             orig_cols = temp_df.columns.tolist()
             norm_cols = [c.upper().strip().replace(" ", "_") for c in orig_cols]
-            
             preferred_names = ["SELLER_SKU_CODE", "SELLER_SKU", "SKU_CODE", "SKU"]
-            sku_col_idx = None
-            for p in preferred_names:
-                if p in norm_cols:
-                    sku_col_idx = norm_cols.index(p)
-                    break
-            if sku_col_idx is None:
-                sku_col_idx = next((i for i, c in enumerate(norm_cols) if "SKU" in c), None)
-
+            sku_col_idx = next((norm_cols.index(p) for p in preferred_names if p in norm_cols), 
+                              next((i for i, c in enumerate(norm_cols) if "SKU" in c), None))
             if sku_col_idx is None: continue
-                
             actual_sku_col = orig_cols[sku_col_idx]
             qty_col_idx = next((i for i, c in enumerate(norm_cols) if any(k in c for k in ["QTY", "QUANT", "COUNT"])), None)
-            
             subset = pd.DataFrame()
             subset['SKU'] = temp_df[actual_sku_col].astype(str)
             subset['RAW_QTY'] = pd.to_numeric(temp_df[orig_cols[qty_col_idx]], errors='coerce').fillna(1) if qty_col_idx is not None else 1
             all_dfs.append(subset)
         except: continue
-
     if not all_dfs: return None
     df = pd.concat(all_dfs, ignore_index=True)
-    
     df['Category'] = df['SKU'].apply(get_category)
     df['Size'] = df['SKU'].apply(extract_size)
     df['Colors'] = df['SKU'].apply(extract_colors)
-    
-    # Unknown reporting
     unknown_report = df[df['Colors'].apply(lambda x: x == ["Unknown"])][['SKU', 'Category', 'Size', 'RAW_QTY']].copy()
-    
     df = df.explode('Colors')
     final_df = df.groupby(['Category', 'Colors', 'Size'], as_index=False)['RAW_QTY'].sum()
     final_df.columns = ["Category", "Color", "Size", "Qty"]
-    
     actual_colors = final_df["Color"].unique().tolist()
     other_colors = sorted([c for c in actual_colors if c not in ["Black", "White", "Unknown"]])
     color_order = ["Black", "White"] + other_colors + ["Unknown"]
-    
     final_df["Color"] = pd.Categorical(final_df["Color"], categories=color_order, ordered=True)
     final_df["Size"] = pd.Categorical(final_df["Size"], categories=SIZE_ORDER, ordered=True)
-    
     return final_df.sort_values(by=["Category", "Color", "Size"]).reset_index(drop=True), unknown_report
 
 def create_pdf(dataframe):
@@ -124,9 +107,8 @@ def create_pdf(dataframe):
     styles = getSampleStyleSheet()
     header_style = styles['Normal']
     header_style.fontSize = 8
-    ts = datetime.now().strftime("%d-%m %H:%M")
     elements.append(Paragraph(f"<b>AAVONI PICK LIST</b>", header_style))
-    elements.append(Paragraph(f"<font size=6>{ts} | Total: {int(dataframe['Qty'].sum())}</font>", header_style))
+    elements.append(Paragraph(f"<font size=6>{datetime.now().strftime('%d-%m %H:%M')} | Total: {int(dataframe['Qty'].sum())}</font>", header_style))
     elements.append(Spacer(1, 0.05*inch))
     data = [["Cat", "Color", "Size", "Qty"]]
     for _, row in dataframe.iterrows():
@@ -138,7 +120,16 @@ def create_pdf(dataframe):
 
 # --- MAIN UI ---
 st.title("📦 Aavoni Pick List PRO")
-uploaded_files = st.sidebar.file_uploader("Upload CSV", type=["csv"], accept_multiple_files=True)
+
+with st.sidebar:
+    st.header("⚙️ Control Panel")
+    uploaded_files = st.file_uploader("Upload Orders (CSV)", type=["csv"], accept_multiple_files=True)
+    
+    st.markdown("---")
+    # --- DEVELOPER NAME ---
+    st.markdown("### 👨‍💻 Developer")
+    st.info("**Developed by: Sunil**")
+    st.caption("v2.6 | Optimized for Myntra/Amazon")
 
 if uploaded_files:
     res = process_data(uploaded_files)
@@ -146,31 +137,50 @@ if uploaded_files:
         final_df, unknown_report = res
         
         with st.sidebar:
-            st.divider()
-            with st.expander("🔍 Unknown SKU Check", expanded=not unknown_report.empty):
+            with st.expander("🔍 Unknown SKU Detector", expanded=not unknown_report.empty):
                 if not unknown_report.empty:
-                    st.warning("Ye SKUs pehchane nahi gaye:")
+                    st.warning("Fix these SKUs in data:")
                     st.dataframe(unknown_report.rename(columns={'RAW_QTY': 'Qty'}), hide_index=True)
                 else:
-                    st.success("All SKUs Matched! ✅")
+                    st.success("All SKUs perfectly matched! ✅")
 
+        # Filters
         cats = sorted(final_df["Category"].unique())
-        selected = st.sidebar.multiselect("Category", cats, default=cats)
+        selected = st.sidebar.multiselect("Select Categories", cats, default=cats)
         display_df = final_df[final_df["Category"].isin(selected)]
 
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Total Items", int(display_df["Qty"].sum()))
-        m2.metric("Variants", len(display_df))
-        m3.metric("Files", len(uploaded_files))
+        # Dashboard Metrics
+        c1, c2, c3 = st.columns(3)
+        c1.metric("📦 Total Items", int(display_df["Qty"].sum()))
+        c2.metric("🌈 Unique Variants", len(display_df))
+        c3.metric("📂 Files Processed", len(uploaded_files))
 
-        st.dataframe(display_df.style.apply(lambda r: ['background-color: #fff2f2; color: #cc0000; font-weight: bold' if r.Qty >= 5 else '' for _ in r], axis=1), use_container_width=True, hide_index=True)
+        st.subheader("📋 Dispatch Table")
+        
+        # Color highlighting for higher quantities
+        def style_rows(row):
+            styles = [''] * len(row)
+            if row.Qty >= 5:
+                styles = ['background-color: #fff2f2; color: #cc0000; font-weight: bold'] * len(row)
+            return styles
 
-        st.divider()
+        st.dataframe(
+            display_df.style.apply(style_rows, axis=1),
+            use_container_width=True,
+            hide_index=True
+        )
+
+        # Action Buttons
+        st.markdown("---")
+        st.subheader("🚀 Export Results")
         col1, col2 = st.columns(2)
         with col1:
             excel_buffer = io.BytesIO()
             with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer: display_df.to_excel(writer, index=False)
-            st.download_button("📥 Excel", data=excel_buffer.getvalue(), file_name=f"PickList.xlsx", use_container_width=True)
+            st.download_button("📥 Download Excel Sheet", data=excel_buffer.getvalue(), file_name=f"PickList_{datetime.now().strftime('%d%m')}.xlsx")
         with col2:
             pdf_file = create_pdf(display_df)
-            st.download_button("📄 PDF", data=pdf_file, file_name=f"PickList.pdf", use_container_width=True)
+            st.download_button("📄 Download PDF (Print Ready)", data=pdf_file, file_name=f"PickList_{datetime.now().strftime('%H%M')}.pdf")
+
+else:
+    st.info("👋 **Aavoni Dashboard** mein aapka swagat hai! Sidebar se apni files upload karein.")
