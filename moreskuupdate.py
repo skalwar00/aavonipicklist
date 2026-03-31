@@ -30,16 +30,19 @@ SIZE_ORDER = ["S","M","L","XL","XXL","2XL","3XL","4XL","5XL","6XL","7XL","8XL","
 # --- HELPERS ---
 
 def extract_size(sku):
-    sku = str(sku).upper().strip()
+    # Underscores ko space se badalna taaki boundary (\b) sahi kaam kare
+    sku = str(sku).upper().strip().replace("_", " ")
     match = re.search(r'(\d{1,2}XL|XXL|XL|L|M|S)$', sku)
     if not match:
-        match = re.search(r'(\d{1,2}XL|XXL|XL|L|M|S)\b', sku)
+        match = re.search(r'\b(\d{1,2}XL|XXL|XL|L|M|S)\b', sku)
     return match.group(1) if match else "Free"
 
 def extract_colors(sku):
-    sku = str(sku).upper()
-    if "CBO" in sku:
-        match = re.search(r'\((.*?)\)', sku)
+    # Underscores ko space se badalna taaki boundary (\b) sahi kaam kare
+    sku_clean = str(sku).upper().replace("_", " ")
+    
+    if "CBO" in sku_clean:
+        match = re.search(r'\((.*?)\)', sku_clean)
         if match:
             parts = match.group(1).replace(" ", "").split("+")
             final_colors = []
@@ -48,11 +51,11 @@ def extract_colors(sku):
                 elif p in COLOR_KEYWORDS: final_colors.append(COLOR_KEYWORDS[p])
             return list(dict.fromkeys(final_colors)) if final_colors else ["Unknown"]
     
-    if any(x in sku for x in ["TEAL", "RB"]): return ["Teal Blue"]
-    if any(x in sku for x in ["SB", "SKY"]): return ["Sky Blue"]
+    if any(x in sku_clean for x in ["TEAL", "RB"]): return ["Teal Blue"]
+    if any(x in sku_clean for x in ["SB", "SKY"]): return ["Sky Blue"]
 
     for key, value in COLOR_KEYWORDS.items():
-        if re.search(rf'\b{key}\b', sku):
+        if re.search(rf'\b{key}\b', sku_clean):
             return [value]
     return ["Unknown"]
 
@@ -71,7 +74,6 @@ def process_data(uploaded_files):
             orig_cols = temp_df.columns.tolist()
             norm_cols = [c.upper().strip().replace(" ", "_") for c in orig_cols]
             
-            # Seller SKU Priority
             preferred_names = ["SELLER_SKU_CODE", "SELLER_SKU", "SKU_CODE", "SKU"]
             sku_col_idx = None
             for p in preferred_names:
@@ -95,19 +97,17 @@ def process_data(uploaded_files):
     if not all_dfs: return None
     df = pd.concat(all_dfs, ignore_index=True)
     
-    # Pre-processing to keep track of original SKU
     df['Category'] = df['SKU'].apply(get_category)
     df['Size'] = df['SKU'].apply(extract_size)
     df['Colors'] = df['SKU'].apply(extract_colors)
     
-    # Store data for "Unknown" reporting before exploding
+    # Unknown reporting
     unknown_report = df[df['Colors'].apply(lambda x: x == ["Unknown"])][['SKU', 'Category', 'Size', 'RAW_QTY']].copy()
     
     df = df.explode('Colors')
     final_df = df.groupby(['Category', 'Colors', 'Size'], as_index=False)['RAW_QTY'].sum()
     final_df.columns = ["Category", "Color", "Size", "Qty"]
     
-    # Sorting
     actual_colors = final_df["Color"].unique().tolist()
     other_colors = sorted([c for c in actual_colors if c not in ["Black", "White", "Unknown"]])
     color_order = ["Black", "White"] + other_colors + ["Unknown"]
@@ -150,20 +150,18 @@ if uploaded_files:
             with st.expander("🔍 Unknown SKU Check", expanded=not unknown_report.empty):
                 if not unknown_report.empty:
                     st.warning("Ye SKUs pehchane nahi gaye:")
-                    # Yahan ab actual SKU dikhega taaki aap check kar sakein
                     st.dataframe(unknown_report.rename(columns={'RAW_QTY': 'Qty'}), hide_index=True)
                 else:
                     st.success("All SKUs Matched! ✅")
 
-        # Filters & Dashboard
         cats = sorted(final_df["Category"].unique())
         selected = st.sidebar.multiselect("Category", cats, default=cats)
         display_df = final_df[final_df["Category"].isin(selected)]
 
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Total Items", int(display_df["Qty"].sum()))
-        c2.metric("Variants", len(display_df))
-        c3.metric("Files", len(uploaded_files))
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Items", int(display_df["Qty"].sum()))
+        m2.metric("Variants", len(display_df))
+        m3.metric("Files", len(uploaded_files))
 
         st.dataframe(display_df.style.apply(lambda r: ['background-color: #fff2f2; color: #cc0000; font-weight: bold' if r.Qty >= 5 else '' for _ in r], axis=1), use_container_width=True, hide_index=True)
 
