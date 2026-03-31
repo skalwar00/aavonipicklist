@@ -133,7 +133,7 @@ def create_pdf(dataframe):
     
     # Total 3.0 inch width divided as:
     # Cat: 0.8" (Increased), Color: 1.05", Size: 0.5", Qty: 0.35", Sh: 0.3"
-    table = Table(data, colWidths=[0.8*inch, 1.05*inch, 0.5*inch, 0.35*inch, 0.3*inch], repeatRows=1)
+    table = Table(data, colWidths=[0.8*inch, 1.05*inch, 0.5*inch, 0.35*inch, 0.3*inch], repeatRows=0)
     
     table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), rl_colors.black),
