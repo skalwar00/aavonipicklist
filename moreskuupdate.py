@@ -8,7 +8,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors as rl_colors
 from reportlab.lib.units import inch
-from reportlab.lib.enums import TA_CENTER # Alignment ke liye import
+from reportlab.lib.enums import TA_CENTER
 
 # --- CONFIG & CONSTANTS ---
 st.set_page_config(page_title="Aavoni Pick List PRO", layout="wide", page_icon="📦")
@@ -109,45 +109,50 @@ def process_data(uploaded_files):
     final_df["Size"] = pd.Categorical(final_df["Size"], categories=SIZE_ORDER, ordered=True)
     return final_df.sort_values(by=["Category", "Color", "Size"]).reset_index(drop=True), unknown_report
 
-# --- PDF LAYOUT FIXED (3x5) WITH CENTER ALIGN ---
+# --- UPDATED PDF (3x5) WITH LARGER FONT ---
 def create_pdf(dataframe):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=(3*inch, 5*inch), 
-                          rightMargin=0.04*inch, leftMargin=0.04*inch, topMargin=0.1*inch, bottomMargin=0.1*inch)
+                          rightMargin=0.03*inch, leftMargin=0.03*inch, topMargin=0.1*inch, bottomMargin=0.1*inch)
     elements = []
     styles = getSampleStyleSheet()
     
     # Header Style
-    header_style = styles['Normal']
-    header_style.fontSize = 7
+    header_style = styles['Normal'].clone('HeaderStyle')
+    header_style.fontSize = 9
+    header_style.alignment = TA_CENTER
     
-    # Custom Centered Style for Color Column
-    centered_style = styles['Normal'].clone('CenteredStyle')
-    centered_style.alignment = TA_CENTER
-    centered_style.fontSize = 6.5
+    # Table Content Style
+    cell_style = styles['Normal'].clone('CellStyle')
+    cell_style.alignment = TA_CENTER
+    cell_style.fontSize = 8  # Bada Font Size
     
+    # Title
     elements.append(Paragraph(f"<b>AAVONI PICK LIST</b>", header_style))
-    elements.append(Paragraph(f"<font size=5>{datetime.now().strftime('%d-%m %H:%M')} | Total: {int(dataframe['Qty'].sum())}</font>", header_style))
+    elements.append(Paragraph(f"<font size=6>{datetime.now().strftime('%d-%m %H:%M')} | Total: {int(dataframe['Qty'].sum())}</font>", header_style))
     elements.append(Spacer(1, 0.05*inch))
     
-    data = [["Cat", "Color", "Size", "Qty"]]
+    data = [["Cat", "Color", "Size", "Qty", "Short"]]
     for _, row in dataframe.iterrows():
-        # Paragraph with centered_style for the Color column
-        p_color = Paragraph(row['Color'], centered_style)
-        data.append([row["Category"], p_color, row["Size"], int(row["Qty"])])
+        p_color = Paragraph(row['Color'], cell_style)
+        data.append([row["Category"], p_color, row["Size"], int(row["Qty"]), ""])
     
-    # Widths: Cat (Bada), Color (Max), Size (Chhota), Qty
-    table = Table(data, colWidths=[0.6*inch, 1.6*inch, 0.45*inch, 0.35*inch], repeatRows=1)
+    # Redistribution for 3 inch width:
+    # Cat: 0.45, Color: 1.05, Size: 0.5, Qty: 0.4, Short: 0.5 (Total 2.9)
+    table = Table(data, colWidths=[0.45*inch, 1.05*inch, 0.5*inch, 0.4*inch, 0.5*inch], repeatRows=1)
     
     table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), rl_colors.black),
         ('TEXTCOLOR',(0,0),(-1,0), rl_colors.white),
-        ('GRID', (0,0), (-1,-1), 0.1, rl_colors.grey),
-        ('FONTSIZE', (0,0), (-1,-1), 6.5),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'), # Centers everything else
+        ('GRID', (0,0), (-1,-1), 0.2, rl_colors.grey),
+        ('FONTSIZE', (0,0), (-1,-1), 8), # Font size 8 for better readability
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
         ('LEFTPADDING', (0,0), (-1,-1), 1),
         ('RIGHTPADDING', (0,0), (-1,-1), 1),
+        ('TOPPADDING', (0,0), (-1,-1), 2),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
     ]))
     
     elements.append(table); doc.build(elements); buffer.seek(0)
@@ -156,7 +161,7 @@ def create_pdf(dataframe):
 # --- MAIN UI ---
 st.title("📦 Aavoni Pick List PRO")
 with st.sidebar:
-    st.header("⚙️ Dashboard Settings")
+    st.header("⚙️ Settings")
     uploaded_files = st.file_uploader("Upload CSV Files", type=["csv"], accept_multiple_files=True)
     st.markdown("---")
     st.markdown('<div class="dev-tag">👨‍💻 Developed by Sunil</div>', unsafe_allow_html=True)
@@ -168,10 +173,10 @@ if uploaded_files:
         with st.sidebar:
             with st.expander("🔍 Unknown SKU Check", expanded=not unknown_report.empty):
                 if not unknown_report.empty:
-                    st.warning("Fix these SKUs:"); st.dataframe(unknown_report.rename(columns={'RAW_QTY': 'Qty'}), hide_index=True)
+                    st.warning("SKUs to check:"); st.dataframe(unknown_report.rename(columns={'RAW_QTY': 'Qty'}), hide_index=True)
                 else: st.success("All colors matched! ✅")
         
-        display_df = final_df[final_df["Category"].isin(st.sidebar.multiselect("Category Filter", sorted(final_df["Category"].unique()), default=final_df["Category"].unique()))]
+        display_df = final_df[final_df["Category"].isin(st.sidebar.multiselect("Category", sorted(final_df["Category"].unique()), default=final_df["Category"].unique()))]
         
         m1, m2, m3 = st.columns(3)
         m1.metric("📦 Total Items", int(display_df["Qty"].sum()))
@@ -187,6 +192,6 @@ if uploaded_files:
             st.download_button("📥 Excel Download", data=excel_buf.getvalue(), file_name="PickList.xlsx", use_container_width=True)
         with c2:
             pdf_file = create_pdf(display_df)
-            st.download_button("📄 PDF Download (3x5)", data=pdf_file, file_name="PickList_3x5.pdf", use_container_width=True)
+            st.download_button("📄 PDF (Bada Font 3x5)", data=pdf_file, file_name="PickList_3x5.pdf", use_container_width=True)
 else:
     st.info("👋 Shuru karne ke liye sidebar se CSV files upload karein.")
