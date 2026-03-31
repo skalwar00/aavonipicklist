@@ -53,31 +53,38 @@ def extract_size(sku):
     return match.group(1) if match else "Free"
 
 def extract_colors(sku):
-    sku_clean = str(sku).upper().replace("_", " ")
+    # Underscore ko space se badalna aur cleanup
+    sku_clean = str(sku).upper().replace("_", " ").strip()
     
-    # Priority check for Royal Blue / RB / Teal to map to "Teal Blue"
+    # --- PRIORITY MAPPING (RB/Teal/Royal Blue ko Teal Blue banana) ---
     teal_variants = ["ROYAL BLUE", "ROYALBLUE", "TEAL", "RB"]
     
+    # 1. Sabse pehle Combo check karein
     if "CBO" in sku_clean:
         match = re.search(r'\((.*?)\)', sku_clean)
         if match:
             parts = match.group(1).replace(" ", "").split("+")
             final_colors = []
             for p in parts:
-                if any(v.replace(" ","") == p or v == p for v in teal_variants):
+                # Agar combo ke andar RB/Teal/RoyalBlue hai
+                if any(v.replace(" ","") == p for v in teal_variants) or p in ["RB", "TEAL"]:
                     final_colors.append("Teal Blue")
                 elif p in COLOR_KEYWORDS: 
                     final_colors.append(COLOR_KEYWORDS[p])
             return list(dict.fromkeys(final_colors)) if final_colors else ["Unknown"]
     
-    if any(x in sku_clean for x in teal_variants): 
+    # 2. Phir direct check (Taki "Blue" keyword se pehle "Royal Blue" check ho)
+    if any(re.search(rf'\b{v}\b', sku_clean) for v in teal_variants) or "ROYAL BLUE" in sku_clean or "ROYALBLUE" in sku_clean:
         return ["Teal Blue"]
         
     if any(x in sku_clean for x in ["SB", "SKY"]): 
         return ["Sky Blue"]
 
+    # 3. Last mein baki saare colors check karein
     for key, value in COLOR_KEYWORDS.items():
-        if re.search(rf'\b{key}\b', sku_clean): return [value]
+        if re.search(rf'\b{key}\b', sku_clean):
+            return [value]
+            
     return ["Unknown"]
 
 def get_category(sku):
@@ -157,7 +164,7 @@ if uploaded_files:
                     st.warning("Fix these SKUs:")
                     st.dataframe(unknown_report.rename(columns={'RAW_QTY': 'Qty'}), hide_index=True)
                 else: st.success("All matched! ✅")
-        selected = st.sidebar.multiselect("Category", sorted(final_df["Category"].unique()), default=final_df["Category"].unique())
+        selected = st.sidebar.multiselect("Filter Category", sorted(final_df["Category"].unique()), default=final_df["Category"].unique())
         display_df = final_df[final_df["Category"].isin(selected)]
         c1, c2, c3 = st.columns(3)
         c1.metric("📦 Items", int(display_df["Qty"].sum()))
