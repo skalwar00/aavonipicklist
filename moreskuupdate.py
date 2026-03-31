@@ -96,7 +96,7 @@ def create_pdf(dataframe):
         if i % 2 == 0:
             style_list.append(('BACKGROUND', (0, i), (-1, i), rl_colors.whitesmoke))
         if int(data[i][3]) > 4:
-            style_list.append(('TEXTCOLOR', (0, i), (-1, i), rl_colors.Black))
+            style_list.append(('TEXTCOLOR', (0, i), (-1, i), rl_colors.black))
             style_list.append(('FONTNAME', (0, i), (-1, i), 'Helvetica-Bold'))
 
     table.setStyle(TableStyle(style_list))
