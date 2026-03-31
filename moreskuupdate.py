@@ -64,47 +64,52 @@ def get_category(sku):
 def process_data(uploaded_files):
     all_dfs = []
     for file in uploaded_files:
-        temp_df = pd.read_csv(file)
-        # Normalize column names: Uppercase, trim spaces, replace spaces with underscores
-        temp_df.columns = [c.upper().strip().replace(" ", "_") for c in temp_df.columns]
-        
-        # Flexible SKU Detection (Check for SKU, SELLER_SKU, SELLER_SKU_CODE, etc.)
-        sku_col = next((c for c in temp_df.columns if "SKU" in c), None)
-        
-        if not sku_col:
-            st.error(f"❌ '{file.name}' missing SKU column.")
-            continue
+        try:
+            temp_df = pd.read_csv(file)
             
-        temp_df = temp_df.rename(columns={sku_col: "SKU"})
-        all_dfs.append(temp_df)
+            # Normalize column names
+            temp_df.columns = [c.upper().strip().replace(" ", "_") for c in temp_df.columns]
+            
+            # FIX: Remove duplicate column names if any
+            temp_df = temp_df.loc[:, ~temp_df.columns.duplicated()]
+            
+            # Flexible SKU & Qty Detection
+            sku_col = next((c for c in temp_df.columns if "SKU" in c), None)
+            qty_col = next((c for c in temp_df.columns if any(k in c for k in ["QTY", "QUANT", "COUNT"])), None)
+            
+            if not sku_col:
+                st.error(f"❌ '{file.name}' missing SKU column.")
+                continue
+                
+            # Keep only necessary data to prevent memory/index issues
+            subset = pd.DataFrame()
+            subset['SKU'] = temp_df[sku_col].astype(str)
+            subset['RAW_QTY'] = pd.to_numeric(temp_df[qty_col], errors='coerce').fillna(1) if qty_col else 1
+            
+            all_dfs.append(subset)
+        except Exception as e:
+            st.error(f"Error reading {file.name}: {e}")
 
     if not all_dfs:
         return None
 
+    # Safe Concat
     df = pd.concat(all_dfs, ignore_index=True)
     
-    # Qty Detection (Flexible: QTY, QUANTITY, ORDER_ITEM_QUANTITY)
-    qty_col = next((c for c in df.columns if any(k in c for k in ["QTY", "QUANT", "COUNT"])), None)
-    if qty_col:
-        df['Qty_Cleaned'] = pd.to_numeric(df[qty_col], errors='coerce').fillna(1)
-    else:
-        df['Qty_Cleaned'] = 1
-
     df['Category'] = df['SKU'].apply(get_category)
     df['Size'] = df['SKU'].apply(extract_size)
     df['Colors'] = df['SKU'].apply(extract_colors)
     df = df.explode('Colors')
     
     # Aggregation
-    final_df = df.groupby(['Category', 'Colors', 'Size'], as_index=False)['Qty_Cleaned'].sum()
+    final_df = df.groupby(['Category', 'Colors', 'Size'], as_index=False)['RAW_QTY'].sum()
     final_df.columns = ["Category", "Color", "Size", "Qty"]
     
-    # Sorting (Black/White First, then Alphabetical, then Unknown)
+    # Sorting Logic (Black/White Priority)
     actual_colors = final_df["Color"].unique().tolist()
     other_colors = sorted([c for c in actual_colors if c not in ["Black", "White", "Unknown"]])
     color_order = ["Black", "White"] + other_colors + ["Unknown"]
     
-    # Filter only relevant sizes present in data
     actual_sizes = final_df["Size"].unique().tolist()
     size_order = [s for s in SIZE_ORDER if s in actual_sizes] + [s for s in actual_sizes if s not in SIZE_ORDER]
 
@@ -165,9 +170,9 @@ st.title("📦 Aavoni Pick List PRO")
 
 with st.sidebar:
     st.header("Upload Center")
-    uploaded_files = st.file_uploader("Upload CSV files (Amazon, Meesho, etc.)", type=["csv"], accept_multiple_files=True)
+    uploaded_files = st.file_uploader("Upload CSV files", type=["csv"], accept_multiple_files=True)
     st.divider()
-    st.caption("v2.4 - Flexible SKU & Detector")
+    st.caption("v2.5 - Stable Build")
 
 if uploaded_files:
     final_df = process_data(uploaded_files)
@@ -188,13 +193,13 @@ if uploaded_files:
         selected_cats = st.sidebar.multiselect("Filter Category", available_cats, default=available_cats)
         display_df = final_df[final_df["Category"].isin(selected_cats)]
 
-        # --- DASHBOARD ---
+        # Dashboard
         m1, m2, m3 = st.columns(3)
         m1.metric("Total Items", int(display_df["Qty"].sum()))
         m2.metric("Variants", len(display_df))
-        m3.metric("Files Uploaded", len(uploaded_files))
+        m3.metric("Files", len(uploaded_files))
 
-        # --- TABLE ---
+        # Table
         st.subheader("📋 Picking Table")
         st.dataframe(
             display_df.style.apply(lambda r: ['background-color: #fff2f2; color: #cc0000; font-weight: bold' if r.Qty >= 5 else '' for _ in r], axis=1),
@@ -202,20 +207,20 @@ if uploaded_files:
             hide_index=True
         )
 
-        # --- EXPORTS ---
+        # Exports
         st.divider()
         c1, c2 = st.columns(2)
         with c1:
             excel_buffer = io.BytesIO()
             with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
                 display_df.to_excel(writer, index=False)
-            st.download_button("📥 Excel Download", data=excel_buffer.getvalue(), 
+            st.download_button("📥 Excel", data=excel_buffer.getvalue(), 
                                file_name=f"PickList_{datetime.now().strftime('%Y%m%d')}.xlsx",
                                use_container_width=True)
         with c2:
             pdf_file = create_pdf(display_df)
-            st.download_button("📄 PDF Download (3x5)", data=pdf_file,
+            st.download_button("📄 PDF (3x5)", data=pdf_file,
                                file_name=f"PickList_{datetime.now().strftime('%H%M')}.pdf",
                                use_container_width=True)
 else:
-    st.info("Upload CSV files to generate your pick list. Supports 'SKU' and 'Seller SKU Code'.")
+    st.info("Upload CSV files. Works with 'SKU', 'Seller SKU Code', and 'Seller SKU'.")
