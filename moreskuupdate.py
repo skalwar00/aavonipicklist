@@ -8,10 +8,12 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors as rl_colors
 from reportlab.lib.units import inch
+from reportlab.lib.enums import TA_CENTER # Alignment ke liye import
 
 # --- CONFIG & CONSTANTS ---
 st.set_page_config(page_title="Aavoni Pick List PRO", layout="wide", page_icon="📦")
 
+# Professional UI Styling
 st.markdown("""
     <style>
     .main { background-color: #f0f2f6; }
@@ -107,15 +109,22 @@ def process_data(uploaded_files):
     final_df["Size"] = pd.Categorical(final_df["Size"], categories=SIZE_ORDER, ordered=True)
     return final_df.sort_values(by=["Category", "Color", "Size"]).reset_index(drop=True), unknown_report
 
-# --- PDF LAYOUT FIXED (3x5) ---
+# --- PDF LAYOUT FIXED (3x5) WITH CENTER ALIGN ---
 def create_pdf(dataframe):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=(3*inch, 5*inch), 
                           rightMargin=0.04*inch, leftMargin=0.04*inch, topMargin=0.1*inch, bottomMargin=0.1*inch)
     elements = []
     styles = getSampleStyleSheet()
+    
+    # Header Style
     header_style = styles['Normal']
     header_style.fontSize = 7
+    
+    # Custom Centered Style for Color Column
+    centered_style = styles['Normal'].clone('CenteredStyle')
+    centered_style.alignment = TA_CENTER
+    centered_style.fontSize = 6.5
     
     elements.append(Paragraph(f"<b>AAVONI PICK LIST</b>", header_style))
     elements.append(Paragraph(f"<font size=5>{datetime.now().strftime('%d-%m %H:%M')} | Total: {int(dataframe['Qty'].sum())}</font>", header_style))
@@ -123,11 +132,11 @@ def create_pdf(dataframe):
     
     data = [["Cat", "Color", "Size", "Qty"]]
     for _, row in dataframe.iterrows():
-        p_color = Paragraph(f"<font size=6.5>{row['Color']}</font>", styles['Normal'])
+        # Paragraph with centered_style for the Color column
+        p_color = Paragraph(row['Color'], centered_style)
         data.append([row["Category"], p_color, row["Size"], int(row["Qty"])])
     
-    # Updated Column Widths as requested:
-    # Cat: 0.6", Color: 1.6", Size: 0.45", Qty: 0.35" = Total 3.0"
+    # Widths: Cat (Bada), Color (Max), Size (Chhota), Qty
     table = Table(data, colWidths=[0.6*inch, 1.6*inch, 0.45*inch, 0.35*inch], repeatRows=1)
     
     table.setStyle(TableStyle([
@@ -135,7 +144,7 @@ def create_pdf(dataframe):
         ('TEXTCOLOR',(0,0),(-1,0), rl_colors.white),
         ('GRID', (0,0), (-1,-1), 0.1, rl_colors.grey),
         ('FONTSIZE', (0,0), (-1,-1), 6.5),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'), # Centers everything else
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
         ('LEFTPADDING', (0,0), (-1,-1), 1),
         ('RIGHTPADDING', (0,0), (-1,-1), 1),
