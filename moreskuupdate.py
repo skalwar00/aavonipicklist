@@ -67,7 +67,6 @@ def extract_colors(sku):
                         final_colors.append(COLOR_KEYWORDS[key]); found = True; break
                 if not found: final_colors.append("Unknown")
             return list(dict.fromkeys(final_colors)) if final_colors else ["Unknown"]
-    
     for key in sorted(COLOR_KEYWORDS.keys(), key=len, reverse=True):
         if re.search(rf'\b{key}\b', sku_clean): return [COLOR_KEYWORDS[key]]
     return ["Unknown"]
@@ -109,7 +108,7 @@ def process_data(uploaded_files):
     final_df["Size"] = pd.Categorical(final_df["Size"], categories=SIZE_ORDER, ordered=True)
     return final_df.sort_values(by=["Category", "Color", "Size"]).reset_index(drop=True), unknown_report
 
-# --- UPDATED PDF (3x5) WITH LARGER FONT ---
+# --- PDF LAYOUT FIXED (3x5) | FONT 7 | BIG CAT COL ---
 def create_pdf(dataframe):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=(3*inch, 5*inch), 
@@ -117,36 +116,30 @@ def create_pdf(dataframe):
     elements = []
     styles = getSampleStyleSheet()
     
-    # Header Style
-    header_style = styles['Normal'].clone('HeaderStyle')
-    header_style.fontSize = 9
-    header_style.alignment = TA_CENTER
-    
-    # Table Content Style
+    # Custom Centered Style
     cell_style = styles['Normal'].clone('CellStyle')
     cell_style.alignment = TA_CENTER
-    cell_style.fontSize = 8  # Bada Font Size
+    cell_style.fontSize = 7
     
     # Title
-    elements.append(Paragraph(f"<b>AAVONI PICK LIST</b>", header_style))
-    elements.append(Paragraph(f"<font size=6>{datetime.now().strftime('%d-%m %H:%M')} | Total: {int(dataframe['Qty'].sum())}</font>", header_style))
+    elements.append(Paragraph(f"<b>AAVONI PICK LIST</b>", cell_style))
+    elements.append(Paragraph(f"<font size=5>{datetime.now().strftime('%d-%m %H:%M')} | Total: {int(dataframe['Qty'].sum())}</font>", cell_style))
     elements.append(Spacer(1, 0.05*inch))
     
-    data = [["Cat", "Color", "Size", "Qty", "Short"]]
+    data = [["Cat", "Color", "Size", "Qty", "Sh"]]
     for _, row in dataframe.iterrows():
         p_color = Paragraph(row['Color'], cell_style)
         data.append([row["Category"], p_color, row["Size"], int(row["Qty"]), ""])
     
-    # Redistribution for 3 inch width:
-    # Cat: 0.45, Color: 1.05, Size: 0.5, Qty: 0.4, Short: 0.5 (Total 2.9)
-    table = Table(data, colWidths=[0.45*inch, 1.05*inch, 0.5*inch, 0.4*inch, 0.5*inch], repeatRows=1)
+    # Total 3.0 inch width divided as:
+    # Cat: 0.8" (Increased), Color: 1.05", Size: 0.5", Qty: 0.35", Sh: 0.3"
+    table = Table(data, colWidths=[0.8*inch, 1.05*inch, 0.5*inch, 0.35*inch, 0.3*inch], repeatRows=1)
     
     table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), rl_colors.black),
         ('TEXTCOLOR',(0,0),(-1,0), rl_colors.white),
         ('GRID', (0,0), (-1,-1), 0.2, rl_colors.grey),
-        ('FONTSIZE', (0,0), (-1,-1), 8), # Font size 8 for better readability
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,-1), 7), 
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
         ('LEFTPADDING', (0,0), (-1,-1), 1),
@@ -176,7 +169,7 @@ if uploaded_files:
                     st.warning("SKUs to check:"); st.dataframe(unknown_report.rename(columns={'RAW_QTY': 'Qty'}), hide_index=True)
                 else: st.success("All colors matched! ✅")
         
-        display_df = final_df[final_df["Category"].isin(st.sidebar.multiselect("Category", sorted(final_df["Category"].unique()), default=final_df["Category"].unique()))]
+        display_df = final_df[final_df["Category"].isin(st.sidebar.multiselect("Category Filter", sorted(final_df["Category"].unique()), default=final_df["Category"].unique()))]
         
         m1, m2, m3 = st.columns(3)
         m1.metric("📦 Total Items", int(display_df["Qty"].sum()))
@@ -189,9 +182,9 @@ if uploaded_files:
         with c1:
             excel_buf = io.BytesIO()
             with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer: display_df.to_excel(writer, index=False)
-            st.download_button("📥 Excel Download", data=excel_buf.getvalue(), file_name="PickList.xlsx", use_container_width=True)
+            st.download_button("📥 Excel", data=excel_buf.getvalue(), file_name="PickList.xlsx", use_container_width=True)
         with c2:
             pdf_file = create_pdf(display_df)
-            st.download_button("📄 PDF (Bada Font 3x5)", data=pdf_file, file_name="PickList_3x5.pdf", use_container_width=True)
+            st.download_button("📄 PDF (Sunil's Final Layout)", data=pdf_file, file_name="PickList_3x5.pdf", use_container_width=True)
 else:
     st.info("👋 Shuru karne ke liye sidebar se CSV files upload karein.")
