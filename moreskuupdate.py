@@ -185,6 +185,6 @@ if uploaded_files:
             st.download_button("📥 Excel", data=excel_buf.getvalue(), file_name="PickList.xlsx", use_container_width=True)
         with c2:
             pdf_file = create_pdf(display_df)
-            st.download_button("📄 PDF (Sunil's Final Layout)", data=pdf_file, file_name="PickList_3x5.pdf", use_container_width=True)
+            st.download_button("📄 Download PDF", data=pdf_file, file_name="PickList_3x5.pdf", use_container_width=True)
 else:
     st.info("👋 Shuru karne ke liye sidebar se CSV files upload karein.")
