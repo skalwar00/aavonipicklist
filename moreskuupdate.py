@@ -12,15 +12,41 @@ from reportlab.lib.units import inch
 # --- CONFIG & CONSTANTS ---
 st.set_page_config(page_title="Aavoni Pick List PRO", layout="wide", page_icon="📦")
 
-# Custom CSS for better look
+# Custom CSS for Professional Look
 st.markdown("""
     <style>
-    .main { background-color: #f8f9fa; }
-    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #007bff; color: white; }
-    .dev-footer { position: fixed; bottom: 10px; left: 10px; font-size: 12px; color: #6c757d; }
+    .main { background-color: #f0f2f6; }
+    .stMetric { 
+        background-color: #ffffff; 
+        padding: 20px; 
+        border-radius: 12px; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        border-left: 5px solid #007bff;
+    }
+    div.stButton > button:first-child {
+        background-color: #007bff;
+        color: white;
+        height: 3em;
+        border-radius: 8px;
+        border: none;
+        font-weight: bold;
+        transition: 0.3s;
+    }
+    div.stButton > button:first-child:hover {
+        background-color: #0056b3;
+        border: none;
+    }
+    .dev-tag {
+        background: linear-gradient(135deg, #007bff, #6610f2);
+        color: white;
+        padding: 10px;
+        border-radius: 8px;
+        text-align: center;
+        font-weight: bold;
+        margin-top: 20px;
+    }
     </style>
-    """, unsafe_allow_stdio=True)
+    """, unsafe_allow_html=True) # FIXED TYPO HERE
 
 COLOR_KEYWORDS = {
     "BLACK": "Black", "BLK": "Black", "WHITE": "White", "WHT": "White",
@@ -126,10 +152,9 @@ with st.sidebar:
     uploaded_files = st.file_uploader("Upload Orders (CSV)", type=["csv"], accept_multiple_files=True)
     
     st.markdown("---")
-    # --- DEVELOPER NAME ---
-    st.markdown("### 👨‍💻 Developer")
-    st.info("**Developed by: Sunil**")
-    st.caption("v2.6 | Optimized for Myntra/Amazon")
+    # --- DEVELOPER BRANDING ---
+    st.markdown('<div class="dev-tag">👨‍💻 Developed by Sunil</div>', unsafe_allow_html=True)
+    st.caption("Aavoni Inventory Solution v2.7")
 
 if uploaded_files:
     res = process_data(uploaded_files)
@@ -139,48 +164,38 @@ if uploaded_files:
         with st.sidebar:
             with st.expander("🔍 Unknown SKU Detector", expanded=not unknown_report.empty):
                 if not unknown_report.empty:
-                    st.warning("Fix these SKUs in data:")
+                    st.warning("Pechan mein nahi aaye:")
                     st.dataframe(unknown_report.rename(columns={'RAW_QTY': 'Qty'}), hide_index=True)
                 else:
-                    st.success("All SKUs perfectly matched! ✅")
+                    st.success("All SKUs matched! ✅")
 
-        # Filters
         cats = sorted(final_df["Category"].unique())
-        selected = st.sidebar.multiselect("Select Categories", cats, default=cats)
+        selected = st.sidebar.multiselect("Filter Category", cats, default=cats)
         display_df = final_df[final_df["Category"].isin(selected)]
 
-        # Dashboard Metrics
+        # Dashboard
         c1, c2, c3 = st.columns(3)
         c1.metric("📦 Total Items", int(display_df["Qty"].sum()))
         c2.metric("🌈 Unique Variants", len(display_df))
-        c3.metric("📂 Files Processed", len(uploaded_files))
+        c3.metric("📂 Files", len(uploaded_files))
 
-        st.subheader("📋 Dispatch Table")
-        
-        # Color highlighting for higher quantities
-        def style_rows(row):
-            styles = [''] * len(row)
-            if row.Qty >= 5:
-                styles = ['background-color: #fff2f2; color: #cc0000; font-weight: bold'] * len(row)
-            return styles
-
+        st.subheader("📋 Packing List")
         st.dataframe(
-            display_df.style.apply(style_rows, axis=1),
+            display_df.style.apply(lambda r: ['background-color: #fff2f2; color: #cc0000; font-weight: bold' if r.Qty >= 5 else '' for _ in r], axis=1),
             use_container_width=True,
             hide_index=True
         )
 
-        # Action Buttons
-        st.markdown("---")
-        st.subheader("🚀 Export Results")
+        st.divider()
+        st.subheader("🚀 Quick Export")
         col1, col2 = st.columns(2)
         with col1:
             excel_buffer = io.BytesIO()
             with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer: display_df.to_excel(writer, index=False)
-            st.download_button("📥 Download Excel Sheet", data=excel_buffer.getvalue(), file_name=f"PickList_{datetime.now().strftime('%d%m')}.xlsx")
+            st.download_button("📥 Excel Sheet", data=excel_buffer.getvalue(), file_name=f"PickList_{datetime.now().strftime('%d%m')}.xlsx", use_container_width=True)
         with col2:
             pdf_file = create_pdf(display_df)
-            st.download_button("📄 Download PDF (Print Ready)", data=pdf_file, file_name=f"PickList_{datetime.now().strftime('%H%M')}.pdf")
+            st.download_button("📄 PDF (Mobile Print)", data=pdf_file, file_name=f"PickList_{datetime.now().strftime('%H%M')}.pdf", use_container_width=True)
 
 else:
-    st.info("👋 **Aavoni Dashboard** mein aapka swagat hai! Sidebar se apni files upload karein.")
+    st.info("👋 **Aavoni Dashboard** | Sidebar se CSV files upload karke shuru karein.")
