@@ -12,6 +12,7 @@ from reportlab.lib.units import inch
 # --- CONFIG & CONSTANTS ---
 st.set_page_config(page_title="Aavoni Pick List PRO", layout="wide", page_icon="📦")
 
+# Professional UI Styling
 st.markdown("""
     <style>
     .main { background-color: #f0f2f6; }
@@ -23,7 +24,7 @@ st.markdown("""
         border-left: 5px solid #007bff;
     }
     div.stButton > button:first-child {
-        background-color: #007bff; color: white; height: 3em; border-radius: 8px; font-weight: bold;
+        background-color: #007bff; color: white; height: 3em; border-radius: 8px; font-weight: bold; width: 100%;
     }
     .dev-tag {
         background: linear-gradient(135deg, #007bff, #6610f2);
@@ -32,12 +33,24 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+# Smart Dictionary: Royal Blue aur RB ko Teal Blue se map kiya gaya hai
 COLOR_KEYWORDS = {
-    "BLACK": "Black", "BLK": "Black", "WHITE": "White", "WHT": "White",
-    "BEIGE": "Beige", "BG": "Beige", "BEG": "Beige", "RANI": "Rani", 
-    "PINK": "Rani", "MAROON": "Maroon", "MRN": "Maroon", "OLIVE": "Olive", 
-    "OLV": "Olive", "NAVY": "Navy", "YELLOW": "Yellow", "GREY": "Grey", 
-    "GRAY": "Grey", "BLUE": "Blue", "GREEN": "Green", "RUST": "Rust",
+    "ROYAL BLUE": "Teal Blue",
+    "ROYALBLUE": "Teal Blue",
+    "TEAL": "Teal Blue",
+    "RB": "Teal Blue",
+    "SKY BLUE": "Sky Blue",
+    "SKY": "Sky Blue",
+    "SB": "Sky Blue",
+    "BLACK": "Black", "BLK": "Black",
+    "WHITE": "White", "WHT": "White",
+    "BEIGE": "Beige", "BG": "Beige", "BEG": "Beige",
+    "RANI": "Rani", "PINK": "Rani",
+    "MAROON": "Maroon", "MRN": "Maroon",
+    "OLIVE": "Olive", "OLV": "Olive",
+    "NAVY": "Navy", "YELLOW": "Yellow",
+    "GREY": "Grey", "GRAY": "Grey",
+    "BLUE": "Blue", "GREEN": "Green", "RUST": "Rust",
     "LAVENDER": "Lavender", "MINT": "Mint", "PEACH": "Peach"
 }
 
@@ -46,44 +59,41 @@ SIZE_ORDER = ["S","M","L","XL","XXL","2XL","3XL","4XL","5XL","6XL","7XL","8XL","
 # --- HELPERS ---
 
 def extract_size(sku):
-    sku = str(sku).upper().strip().replace("_", " ")
+    # Separators cleanup
+    sku = str(sku).upper().strip().replace("_", " ").replace("-", " ")
     match = re.search(r'(\d{1,2}XL|XXL|XL|L|M|S)$', sku)
     if not match:
         match = re.search(r'\b(\d{1,2}XL|XXL|XL|L|M|S)\b', sku)
     return match.group(1) if match else "Free"
 
 def extract_colors(sku):
-    # Underscore ko space se badalna aur cleanup
-    sku_clean = str(sku).upper().replace("_", " ").strip()
+    # Clean up SKU string
+    sku_clean = str(sku).upper().replace("_", " ").replace("-", " ").strip()
     
-    # --- PRIORITY MAPPING (RB/Teal/Royal Blue ko Teal Blue banana) ---
-    teal_variants = ["ROYAL BLUE", "ROYALBLUE", "TEAL", "RB"]
-    
-    # 1. Sabse pehle Combo check karein
+    # 1. Combo (CBO) Handling
     if "CBO" in sku_clean:
         match = re.search(r'\((.*?)\)', sku_clean)
         if match:
+            # Parts ko split karke har part ka color dhoondhna
             parts = match.group(1).replace(" ", "").split("+")
             final_colors = []
             for p in parts:
-                # Agar combo ke andar RB/Teal/RoyalBlue hai
-                if any(v.replace(" ","") == p for v in teal_variants) or p in ["RB", "TEAL"]:
-                    final_colors.append("Teal Blue")
-                elif p in COLOR_KEYWORDS: 
-                    final_colors.append(COLOR_KEYWORDS[p])
+                found = False
+                # Longest keys ko pehle check karein (taaki Royal Blue pehle pick ho)
+                for key in sorted(COLOR_KEYWORDS.keys(), key=len, reverse=True):
+                    # Check for exact match within combo part
+                    if key.replace(" ","") == p or key == p:
+                        final_colors.append(COLOR_KEYWORDS[key])
+                        found = True
+                        break
+                if not found: final_colors.append("Unknown")
             return list(dict.fromkeys(final_colors)) if final_colors else ["Unknown"]
     
-    # 2. Phir direct check (Taki "Blue" keyword se pehle "Royal Blue" check ho)
-    if any(re.search(rf'\b{v}\b', sku_clean) for v in teal_variants) or "ROYAL BLUE" in sku_clean or "ROYALBLUE" in sku_clean:
-        return ["Teal Blue"]
-        
-    if any(x in sku_clean for x in ["SB", "SKY"]): 
-        return ["Sky Blue"]
-
-    # 3. Last mein baki saare colors check karein
-    for key, value in COLOR_KEYWORDS.items():
+    # 2. Regular Color Search
+    # Sabse lambe words (e.g. "ROYAL BLUE") ko pehle check karenge
+    for key in sorted(COLOR_KEYWORDS.keys(), key=len, reverse=True):
         if re.search(rf'\b{key}\b', sku_clean):
-            return [value]
+            return [COLOR_KEYWORDS[key]]
             
     return ["Unknown"]
 
@@ -101,31 +111,42 @@ def process_data(uploaded_files):
             temp_df = pd.read_csv(file)
             orig_cols = temp_df.columns.tolist()
             norm_cols = [c.upper().strip().replace(" ", "_") for c in orig_cols]
+            
             preferred_names = ["SELLER_SKU_CODE", "SELLER_SKU", "SKU_CODE", "SKU"]
             sku_col_idx = next((norm_cols.index(p) for p in preferred_names if p in norm_cols), 
                               next((i for i, c in enumerate(norm_cols) if "SKU" in c), None))
+            
             if sku_col_idx is None: continue
             actual_sku_col = orig_cols[sku_col_idx]
+            
             qty_col_idx = next((i for i, c in enumerate(norm_cols) if any(k in c for k in ["QTY", "QUANT", "COUNT"])), None)
+            
             subset = pd.DataFrame()
             subset['SKU'] = temp_df[actual_sku_col].astype(str)
             subset['RAW_QTY'] = pd.to_numeric(temp_df[orig_cols[qty_col_idx]], errors='coerce').fillna(1) if qty_col_idx is not None else 1
             all_dfs.append(subset)
         except: continue
+
     if not all_dfs: return None
     df = pd.concat(all_dfs, ignore_index=True)
+    
     df['Category'] = df['SKU'].apply(get_category)
     df['Size'] = df['SKU'].apply(extract_size)
     df['Colors'] = df['SKU'].apply(extract_colors)
+    
     unknown_report = df[df['Colors'].apply(lambda x: x == ["Unknown"])][['SKU', 'Category', 'Size', 'RAW_QTY']].copy()
+    
     df = df.explode('Colors')
     final_df = df.groupby(['Category', 'Colors', 'Size'], as_index=False)['RAW_QTY'].sum()
     final_df.columns = ["Category", "Color", "Size", "Qty"]
+    
     actual_colors = final_df["Color"].unique().tolist()
     other_colors = sorted([c for c in actual_colors if c not in ["Black", "White", "Unknown"]])
     color_order = ["Black", "White"] + other_colors + ["Unknown"]
+    
     final_df["Color"] = pd.Categorical(final_df["Color"], categories=color_order, ordered=True)
     final_df["Size"] = pd.Categorical(final_df["Size"], categories=SIZE_ORDER, ordered=True)
+    
     return final_df.sort_values(by=["Category", "Color", "Size"]).reset_index(drop=True), unknown_report
 
 def create_pdf(dataframe):
@@ -146,39 +167,55 @@ def create_pdf(dataframe):
     elements.append(table); doc.build(elements); buffer.seek(0)
     return buffer
 
-# --- UI ---
+# --- MAIN UI ---
 st.title("📦 Aavoni Pick List PRO")
+
 with st.sidebar:
-    st.header("⚙️ Control Panel")
-    uploaded_files = st.file_uploader("Upload Orders (CSV)", type=["csv"], accept_multiple_files=True)
+    st.header("⚙️ Dashboard Settings")
+    uploaded_files = st.file_uploader("Upload CSV Files", type=["csv"], accept_multiple_files=True)
     st.markdown("---")
+    # SUNIL Branding
     st.markdown('<div class="dev-tag">👨‍💻 Developed by Sunil</div>', unsafe_allow_html=True)
+    st.caption("v2.8 | Advanced Color Logic")
 
 if uploaded_files:
     res = process_data(uploaded_files)
     if res:
         final_df, unknown_report = res
+        
         with st.sidebar:
-            with st.expander("🔍 Unknown SKU Detector", expanded=not unknown_report.empty):
+            with st.expander("🔍 Unknown SKU Check", expanded=not unknown_report.empty):
                 if not unknown_report.empty:
-                    st.warning("Fix these SKUs:")
+                    st.warning("Fix these SKUs in data:")
                     st.dataframe(unknown_report.rename(columns={'RAW_QTY': 'Qty'}), hide_index=True)
-                else: st.success("All matched! ✅")
-        selected = st.sidebar.multiselect("Filter Category", sorted(final_df["Category"].unique()), default=final_df["Category"].unique())
+                else:
+                    st.success("All colors matched perfectly! ✅")
+
+        # Filters
+        cats = sorted(final_df["Category"].unique())
+        selected = st.sidebar.multiselect("Category Filter", cats, default=cats)
         display_df = final_df[final_df["Category"].isin(selected)]
-        c1, c2, c3 = st.columns(3)
-        c1.metric("📦 Items", int(display_df["Qty"].sum()))
-        c2.metric("🌈 Variants", len(display_df))
-        c3.metric("📂 Files", len(uploaded_files))
-        st.dataframe(display_df.style.apply(lambda r: ['background-color: #fff2f2; color: #cc0000; font-weight: bold' if r.Qty >= 5 else '' for _ in r], axis=1), use_container_width=True, hide_index=True)
+
+        # Dashboard Metrics
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Items", int(display_df["Qty"].sum()))
+        m2.metric("Variants", len(display_df))
+        m3.metric("Files", len(uploaded_files))
+
+        st.subheader("📋 Final Picking Table")
+        st.dataframe(
+            display_df.style.apply(lambda r: ['background-color: #fff2f2; color: #cc0000; font-weight: bold' if r.Qty >= 5 else '' for _ in r], axis=1),
+            use_container_width=True, hide_index=True
+        )
+
         st.divider()
-        col1, col2 = st.columns(2)
-        with col1:
-            excel_buffer = io.BytesIO()
-            with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer: display_df.to_excel(writer, index=False)
-            st.download_button("📥 Excel Sheet", data=excel_buffer.getvalue(), file_name=f"PickList.xlsx", use_container_width=True)
-        with col2:
+        c1, c2 = st.columns(2)
+        with c1:
+            excel_buf = io.BytesIO()
+            with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer: display_df.to_excel(writer, index=False)
+            st.download_button("📥 Excel Download", data=excel_buf.getvalue(), file_name=f"PickList.xlsx", use_container_width=True)
+        with c2:
             pdf_file = create_pdf(display_df)
-            st.download_button("📄 PDF (Print)", data=pdf_file, file_name=f"PickList.pdf", use_container_width=True)
+            st.download_button("📄 PDF Download (Print Friendly)", data=pdf_file, file_name=f"PickList.pdf", use_container_width=True)
 else:
-    st.info("👋 Dashboard ready! Upload files to start.")
+    st.info("👋 Shuru karne ke liye sidebar se CSV files upload karein.")
