@@ -37,8 +37,8 @@ COLOR_KEYWORDS = {
     "BLACK": "Black", "BLK": "Black", "WHITE": "White", "WHT": "White",
     "BEIGE": "Beige", "BG": "Beige", "BEG": "Beige", "RANI": "Rani", "PINK": "Rani", "PINNK": "Rani",
     "MAROON": "Maroon", "MRN": "Maroon", "OLIVE": "Olive", "OLV": "Olive",
-    "NAVY": "Navy", "YELLOW": "Yellow", "YELLOW": "ylw", "GREY": "Grey", "GRAY": "Grey",
-    "BLUE": "Blue", "GREEN": "Green", "RUST": "Rust",
+    "NAVY": "Navy", "YELLOW": "Yellow", "YLW": "Yellow", "GREY": "Grey", "GRAY": "Grey",
+    "BLUE": "Blue", "GREEN": "Green", "GRN": "Green", "RUST": "Rust",
     "LAVENDER": "Lavender", "MINT": "Mint", "PEACH": "Peach"
 }
 
