@@ -32,7 +32,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 COLOR_KEYWORDS = {
-    "ROYAL BLUE": "Teal Blue", "ROYALBLUE": "Teal Blue", "TEAL": "Teal Blue", "RB": "Teal Blue",
+    "ROYAL BLUE": "Teal Blue", "ROYALBLUE": "Teal Blue", "TEAL": "Teal Blue", "RB": "Teal Blue", "TEALBLUE": "Teal Blue",
     "SKY BLUE": "Sky Blue", "SKY": "Sky Blue", "SB": "Sky Blue",
     "BLACK": "Black", "BLK": "Black", "BLCK": "Black", "WHITE": "White", "WHT": "White",
     "BEIGE": "Beige", "BG": "Beige", "BEG": "Beige", "RANI": "Rani", "PINK": "Rani", "PINNK": "Rani",
